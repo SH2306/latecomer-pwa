@@ -7,20 +7,10 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
-  <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d6efd">
-<script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("service-worker.js");
-  }
-</script>
-
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
   <style>
     body { background:#f7f7f7; }
     .container-sm { max-width: 560px; }
     .card { border-radius: 12px; }
-    #reader { width: 100%; }
     #message.success { color: #198754; }
     #message.error { color: #dc3545; }
     .small-muted { font-size: .9rem; color:#6c757d; }
@@ -30,30 +20,13 @@
   <div class="container-sm py-4">
     <h3 class="text-center mb-3">📋 Latecomer Registration</h3>
 
-    <!-- Manual Entry -->
+    <!-- Manual Entry with Autocomplete -->
     <div class="card mb-3 shadow-sm">
       <div class="card-body">
         <h5 class="card-title">Manual Entry</h5>
-        <div class="input-group">
-          <input id="studentId" class="form-control" placeholder="Enter Student ID (or scan QR)" />
-          <button class="btn btn-primary" id="btnSubmitManual">Submit</button>
-        </div>
-        <div class="small-muted mt-2">Example: <code>sidb8a001</code></div>
-      </div>
-    </div>
-
-    <!-- QR Scanner -->
-    <div class="card mb-3 shadow-sm">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between">
-          <h5 class="card-title mb-0">QR Code Scan</h5>
-          <div>
-            <button class="btn btn-outline-secondary btn-sm" id="btnStartQR">Start</button>
-            <button class="btn btn-outline-secondary btn-sm" id="btnStopQR" disabled>Stop</button>
-          </div>
-        </div>
-        <div id="reader" class="mt-3"></div>
-        <div id="scanHint" class="small-muted mt-2">Grant camera permission and point to the student QR.</div>
+        <input list="studentList" id="studentName" class="form-control mb-2" placeholder="Enter Name or initial" />
+        <datalist id="studentList"></datalist>
+        <button class="btn btn-primary w-100" id="btnSubmitManual">Mark Late</button>
       </div>
     </div>
 
