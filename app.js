@@ -1,137 +1,92 @@
-// -------------------- CONFIG --------------------
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxeACCBVOprVJ1XNK3TdCtL_7l_J6SxxmIfBbM8JrNik17Y8mPpkDYk6Htys8EXWAOeAQ/exec";
-const studentIdInput = document.getElementById("studentId");
-const btnSubmitManual = document.getElementById("btnSubmitManual");
+const WEBAPP_URL = "YOUR_WEBAPP_URL_HERE"; // Replace with your Apps Script Web App URL
+
+// Offline queue
+let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+
+// DOM elements
+const studentInput = document.getElementById("studentName");
+const studentList = document.getElementById("studentList");
+const btnSubmit = document.getElementById("btnSubmitManual");
 const btnSync = document.getElementById("btnSync");
-const messageBox = document.getElementById("message");
+const message = document.getElementById("message");
 const queueList = document.getElementById("queueList");
-const btnStartQR = document.getElementById("btnStartQR");
-const btnStopQR = document.getElementById("btnStopQR");
-const qrReaderId = "reader";
 
-let offlineQueue = [];
-let html5QrcodeScanner;
-
-// -------------------- LOCAL STORAGE --------------------
-function loadQueue() {
-  const data = localStorage.getItem("latecomerQueue");
-  offlineQueue = data ? JSON.parse(data) : [];
-  renderQueue();
-}
-
-function saveQueue() {
-  localStorage.setItem("latecomerQueue", JSON.stringify(offlineQueue));
-}
-
+// Display offline queue
 function renderQueue() {
   queueList.innerHTML = "";
-  offlineQueue.forEach(item => {
+  queue.forEach(item => {
     const li = document.createElement("li");
     li.className = "list-group-item";
-    li.textContent = `${item.name || item.id} at ${item.time || "Pending"}`;
+    li.textContent = `${item.name} • ${item.class}-${item.division} at ${item.time}`;
     queueList.appendChild(li);
   });
 }
+renderQueue();
 
-// -------------------- SUBMIT FUNCTION --------------------
-function submitLatecomer(id) {
-  if (!id) return;
-  const timestamp = new Date();
-  const timeStr = timestamp.toLocaleTimeString("en-IN", { hour12: true });
-  
-  fetch(`${WEBAPP_URL}?id=${id}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.status && data.status.includes("✅")) {
-        messageBox.textContent = `${data.name} • ${data.class}-${data.division} at ${data.time}`;
-        messageBox.style.color = "green";
-        offlineQueue.push({ id: data.id, name: data.name, class: data.class, division: data.division, time: data.time });
-        saveQueue();
-        renderQueue();
-      } else {
-        messageBox.textContent = data.status || "❌ Error";
-        messageBox.style.color = "red";
-      }
-    })
-    .catch(err => {
-      // Offline mode: save locally
-      messageBox.textContent = "📴 Saved offline";
-      messageBox.style.color = "blue";
-      offlineQueue.push({ id: id, name: null, time: timestamp.toLocaleString("en-IN") });
-      saveQueue();
-      renderQueue();
+// Autocomplete
+studentInput.addEventListener("input", async () => {
+  const query = studentInput.value.trim();
+  if (!query) return;
+
+  try {
+    const res = await fetch(`${WEBAPP_URL}?action=search&name=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    studentList.innerHTML = "";
+    data.forEach(s => {
+      const option = document.createElement("option");
+      option.value = `${s.name} • ${s.class}-${s.division}`;
+      studentList.appendChild(option);
     });
-}
-
-// -------------------- MANUAL ENTRY --------------------
-btnSubmitManual.addEventListener("click", () => {
-  const id = studentIdInput.value.trim();
-  studentIdInput.value = "";
-  submitLatecomer(id);
-});
-
-// -------------------- OFFLINE SYNC --------------------
-btnSync.addEventListener("click", () => {
-  if (!navigator.onLine) {
-    messageBox.textContent = "❌ You are offline. Connect to internet to sync.";
-    messageBox.style.color = "red";
-    return;
+  } catch (err) {
+    console.error("Autocomplete error", err);
   }
-
-  const queueCopy = [...offlineQueue];
-  offlineQueue = [];
-  saveQueue();
-  renderQueue();
-
-  queueCopy.forEach(item => {
-    if (item.id) submitLatecomer(item.id);
-  });
-
-  messageBox.textContent = "⬆️ Syncing pending entries...";
-  messageBox.style.color = "green";
 });
 
-// -------------------- QR SCANNER --------------------
-btnStartQR.addEventListener("click", () => {
-  html5QrcodeScanner = new Html5Qrcode(qrReaderId);
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras && cameras.length) {
-      html5QrcodeScanner.start(
-        cameras[0].id,
-        { fps: 10, qrbox: 250 },
-        qrCodeMessage => {
-          const id = qrCodeMessage.trim();
-          studentIdInput.value = id;
-          submitLatecomer(id);
-          stopQRScanner();
-        },
-        err => console.warn("QR scan error:", err)
-      );
-      btnStartQR.disabled = true;
-      btnStopQR.disabled = false;
+// Submit late entry
+btnSubmit.addEventListener("click", async () => {
+  const value = studentInput.value.trim();
+  if (!value) return;
+  const namePart = value.split(" • ")[0]; // extract actual name
+  try {
+    const res = await fetch(`${WEBAPP_URL}?action=mark&name=${encodeURIComponent(namePart)}`);
+    const data = await res.json();
+    if (data.status.includes("✅")) {
+      showMessage(`${data.name} • ${data.class}-${data.division} marked late at ${data.time}`, "success");
+      studentInput.value = "";
     } else {
-      messageBox.textContent = "❌ No camera found";
-      messageBox.style.color = "red";
+      // offline push
+      queue.push({name:namePart, class:data.class||"-", division:data.division||"-", time:new Date().toLocaleString()});
+      localStorage.setItem("offlineQueue", JSON.stringify(queue));
+      renderQueue();
+      showMessage(`Saved offline: ${namePart}`, "error");
     }
-  }).catch(err => {
-    messageBox.textContent = "❌ Camera error: " + err;
-    messageBox.style.color = "red";
-  });
-});
-
-btnStopQR.addEventListener("click", stopQRScanner);
-
-function stopQRScanner() {
-  if (html5QrcodeScanner) {
-    html5QrcodeScanner.stop().then(() => {
-      html5QrcodeScanner.clear();
-      btnStartQR.disabled = false;
-      btnStopQR.disabled = true;
-    }).catch(err => console.error(err));
+  } catch (err) {
+    queue.push({name:namePart, class:"-", division:"-", time:new Date().toLocaleString()});
+    localStorage.setItem("offlineQueue", JSON.stringify(queue));
+    renderQueue();
+    showMessage(`Saved offline: ${namePart}`, "error");
   }
-}
-
-// -------------------- INIT --------------------
-window.addEventListener("load", () => {
-  loadQueue();
 });
+
+// Sync offline queue
+btnSync.addEventListener("click", async () => {
+  const oldQueue = [...queue];
+  for (let i=0;i<queue.length;i++){
+    const entry = queue[i];
+    try {
+      await fetch(`${WEBAPP_URL}?action=mark&name=${encodeURIComponent(entry.name)}`);
+      queue.splice(i,1);
+      i--;
+    } catch(e){ console.error("Sync failed", e); }
+  }
+  localStorage.setItem("offlineQueue", JSON.stringify(queue));
+  renderQueue();
+  showMessage(`Synced ${oldQueue.length - queue.length} entries`, "success");
+});
+
+// message helper
+function showMessage(txt,type){
+  message.textContent = txt;
+  message.className = type==="success" ? "fw-semibold text-success" : "fw-semibold text-danger";
+  setTimeout(()=>{ message.textContent=""; }, 5000);
+}
