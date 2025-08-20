@@ -1,105 +1,99 @@
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyNgz99oqlTMF0YuRzatuYBPL5DbjscxsyC5BsnDYPT0ZksHpfoOydpaYJSfFWT54oMqQ/exec"; // Replace with your Apps Script URL
-const messageEl = document.getElementById('message');
-const studentInput = document.getElementById('studentName');
-const autocompleteList = document.getElementById('autocomplete-list');
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzjX3tLfsq4lBNUkSNyLYtur5RE7ATcvo4m7i6xeI_XXDcCjuJJe5rSo7eoFFcPEYjJbw/exec";
 
-let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
+let queue = JSON.parse(localStorage.getItem("latecomerQueue") || "[]");
+const studentInput = document.getElementById("studentId");
+const studentList = document.getElementById("studentList");
+const btnSubmit = document.getElementById("btnSubmitManual");
+const messageDiv = document.getElementById("message");
+const queueList = document.getElementById("queueList");
+const btnSync = document.getElementById("btnSync");
 
-function saveQueue() {
-  localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
-  renderQueue();
-}
-
-function renderQueue() {
-  const queueList = document.getElementById('queueList');
-  if (!queueList) return;
-  queueList.innerHTML = '';
-  offlineQueue.forEach(item => {
-    const li = document.createElement('li');
-    li.className = 'list-group-item';
-    li.textContent = `${item.name} • ${item.class}-${item.division} at ${item.time}`;
+function updateQueueUI() {
+  queueList.innerHTML = "";
+  queue.forEach(item => {
+    const li = document.createElement("li");
+    li.className = "list-group-item";
+    li.textContent = `${item.name} • ${item.time}`;
     queueList.appendChild(li);
   });
 }
+updateQueueUI();
 
-// Fetch matching students
-async function searchStudents(query) {
-  const url = `${GAS_URL}?action=search&name=${encodeURIComponent(query)}`;
-  try {
-    const res = await fetch(url);
-    return await res.json();
-  } catch {
-    return [];
-  }
-}
-
-// Render autocomplete
-function renderAutocomplete(students) {
-  autocompleteList.innerHTML = '';
-  students.forEach(s => {
-    const item = document.createElement('div');
-    item.className = 'autocomplete-item';
-    item.textContent = `${s.name} • ${s.class}-${s.division}`;
-    item.onclick = () => {
-      studentInput.value = s.name;
-      autocompleteList.innerHTML = '';
-    };
-    autocompleteList.appendChild(item);
-  });
-}
-
-// Input event
-studentInput.addEventListener('input', async () => {
-  const query = studentInput.value.trim();
-  if (!query) return autocompleteList.innerHTML = '';
-  const students = await searchStudents(query);
-  renderAutocomplete(students);
+// Manual entry submission
+btnSubmit.addEventListener("click", () => {
+  const id = studentInput.value.trim();
+  if (!id) return;
+  markLate(id);
+  studentInput.value = "";
 });
 
-// Mark student late
-document.getElementById('btnSubmit').addEventListener('click', async () => {
-  const name = studentInput.value.trim();
-  if (!name) return alert('Enter a student name!');
-  
-  const payload = { action: 'mark', name };
-  
+// Fetch student data from Apps Script
+async function markLate(studentId) {
   try {
-    const res = await fetch(`${GAS_URL}?action=mark&name=${encodeURIComponent(name)}`);
+    const res = await fetch(`${GAS_URL}?id=${studentId}`);
     const data = await res.json();
-    if (data.color === 'green') {
-      messageEl.textContent = `✅ ${data.name} • ${data.class}-${data.division} marked late at ${data.time}`;
-      messageEl.className = 'fw-semibold success';
-      studentInput.value = '';
+    if (data.status.includes("✅")) {
+      showMessage(`${data.name} • ${data.class}-${data.division} marked late at ${data.time}`, "success");
     } else {
-      throw new Error(data.status);
+      showMessage(data.status, "error");
     }
-  } catch {
-    // Offline: save to queue
+  } catch (err) {
+    // Offline: add to local queue
     const now = new Date();
-    offlineQueue.push({ name, class: '-', division: '-', time: now.toLocaleString() });
-    saveQueue();
-    messageEl.textContent = `📴 Saved offline: ${name}`;
-    messageEl.className = 'fw-semibold error';
-    studentInput.value = '';
+    queue.push({ id: studentId, name: studentId, time: now.toLocaleString() });
+    localStorage.setItem("latecomerQueue", JSON.stringify(queue));
+    updateQueueUI();
+    showMessage(`📴 Saved offline: ${studentId}`, "error");
   }
-});
+}
+
+function showMessage(msg, type) {
+  messageDiv.textContent = msg;
+  messageDiv.className = type === "success" ? "fw-semibold success" : "fw-semibold error";
+  setTimeout(() => { messageDiv.textContent = ""; }, 4000);
+}
 
 // Sync offline queue
-document.getElementById('btnSync')?.addEventListener('click', async () => {
-  const queueCopy = [...offlineQueue];
-  for (let item of queueCopy) {
-    try {
-      const res = await fetch(`${GAS_URL}?action=mark&name=${encodeURIComponent(item.name)}`);
-      const data = await res.json();
-      if (data.color === 'green') {
-        offlineQueue = offlineQueue.filter(q => q.name !== item.name);
-        saveQueue();
-      }
-    } catch { }
+btnSync.addEventListener("click", async () => {
+  const copyQueue = [...queue];
+  for (const item of copyQueue) {
+    await markLate(item.id);
+    queue = queue.filter(q => q.id !== item.id);
+    localStorage.setItem("latecomerQueue", JSON.stringify(queue));
+    updateQueueUI();
   }
-  alert('Offline queue synced if online.');
 });
 
-// Initialize queue render
-renderQueue();
+// QR Code scanning
+let html5QrcodeScanner;
+const btnStartQR = document.getElementById("btnStartQR");
+const btnStopQR = document.getElementById("btnStopQR");
+const readerDiv = document.getElementById("reader");
 
+btnStartQR.addEventListener("click", () => {
+  html5QrcodeScanner = new Html5Qrcode("reader");
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      html5QrcodeScanner.start(cameras[0].id, { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          markLate(qrCodeMessage);
+        },
+        err => {
+          console.log("QR Error", err);
+        }
+      );
+      btnStartQR.disabled = true;
+      btnStopQR.disabled = false;
+    }
+  }).catch(err => showMessage("❌ Camera error: " + err, "error"));
+});
+
+btnStopQR.addEventListener("click", () => {
+  if (html5QrcodeScanner) {
+    html5QrcodeScanner.stop().then(() => {
+      readerDiv.innerHTML = "";
+      btnStartQR.disabled = false;
+      btnStopQR.disabled = true;
+    });
+  }
+});
