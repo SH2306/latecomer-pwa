@@ -1,12 +1,21 @@
 {
-  "name": "Latecomer PWA",
+  "name": "Latecomer Registration",
   "short_name": "Latecomer",
+  "description": "Quickly mark students as late",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f7f7f7",
   "theme_color": "#0d6efd",
   "icons": [
-    {"src": "icons/icon-192.png","sizes":"192x192","type":"image/png"},
-    {"src": "icons/icon-512.png","sizes":"512x512","type":"image/png"}
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
