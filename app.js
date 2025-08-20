@@ -1,4 +1,4 @@
-const WEBAPP_URL = "YOUR_WEBAPP_URL_HERE"; // Replace with your Apps Script Web App URL
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyJhLO_OJfKZPEEYvcd9u7e3SChIvvDT23AwjRmsPEaDzGPF4sfndo4wG68-Q0aTJJVMA/exec"; // Replace with your Apps Script Web App URL
 
 // Offline queue
 let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
@@ -90,3 +90,4 @@ function showMessage(txt,type){
   message.className = type==="success" ? "fw-semibold text-success" : "fw-semibold text-danger";
   setTimeout(()=>{ message.textContent=""; }, 5000);
 }
+
