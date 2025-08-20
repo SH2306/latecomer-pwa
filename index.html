@@ -1,64 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Latecomer Registration</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background:#f7f7f7; }
-    .container-sm { max-width: 560px; }
+    body { background: #f7f7f7; }
+    .container-sm { max-width: 600px; }
     .card { border-radius: 12px; }
     #message.success { color: #198754; }
     #message.error { color: #dc3545; }
     .small-muted { font-size: .9rem; color:#6c757d; }
+    #autocomplete-list { max-height: 200px; overflow-y: auto; }
+    .autocomplete-item { cursor: pointer; padding: 5px; border-bottom: 1px solid #eee; }
+    .autocomplete-item:hover { background-color: #f0f0f0; }
   </style>
 </head>
 <body>
-  <div class="container-sm py-4">
-    <h3 class="text-center mb-3">📋 Latecomer Registration</h3>
+<div class="container-sm py-4">
+  <h3 class="text-center mb-3">📋 Latecomer Registration</h3>
 
-    <!-- Manual Entry with Autocomplete -->
-    <div class="card mb-3 shadow-sm">
-      <div class="card-body">
-        <h5 class="card-title">Manual Entry</h5>
-        <input list="studentList" id="studentName" class="form-control mb-2" placeholder="Enter Name or initial" />
-        <datalist id="studentList"></datalist>
-        <button class="btn btn-primary w-100" id="btnSubmitManual">Mark Late</button>
+  <!-- Class/Section Filter -->
+  <div class="card mb-3 shadow-sm">
+    <div class="card-body">
+      <h5 class="card-title">Filter by Class & Section</h5>
+      <div class="d-flex gap-2 flex-wrap" id="classFilter">
+        <!-- dynamically generate checkboxes -->
       </div>
-    </div>
-
-    <!-- Status / Messages -->
-    <div class="card mb-3 shadow-sm">
-      <div class="card-body">
-        <div id="message" class="fw-semibold"></div>
-      </div>
-    </div>
-
-    <!-- Offline Queue -->
-    <div class="card mb-5 shadow-sm">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between">
-          <h5 class="card-title mb-0">Pending (Offline) Queue</h5>
-          <button class="btn btn-success btn-sm" id="btnSync">⬆️ Sync Pending</button>
-        </div>
-        <ul id="queueList" class="list-group mt-3"></ul>
-        <div class="small-muted mt-2">Pending entries are stored locally and will sync when online.</div>
-      </div>
-    </div>
-
-    <div class="text-center small-muted">
-      <span>Installable PWA • Works offline (UI) • Live sync to Google Sheet</span>
     </div>
   </div>
 
-  <script src="app.js"></script>
-  <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("sw.js");
-    }
-  </script>
+  <!-- Name Autocomplete -->
+  <div class="card mb-3 shadow-sm">
+    <div class="card-body">
+      <h5 class="card-title">Manual Entry</h5>
+      <input id="studentName" class="form-control" placeholder="Enter student name..." autocomplete="off">
+      <div id="autocomplete-list" class="mt-1"></div>
+      <button class="btn btn-primary mt-2" id="btnSubmit">Mark Late</button>
+      <div class="small-muted mt-2">Select student from list above for quick marking.</div>
+    </div>
+  </div>
+
+  <!-- Status / Messages -->
+  <div class="card mb-3 shadow-sm">
+    <div class="card-body">
+      <div id="message" class="fw-semibold"></div>
+    </div>
+  </div>
+
+  <div class="text-center small-muted">
+    <span>Installable PWA • Works offline • Live sync to Google Sheet</span>
+  </div>
+</div>
+
+<script>
+const GAS_URL = "YOUR_WEBAPP_URL_HERE"; // replace with your deployed Apps Script URL
+
+const messageEl = document.getElementById('message');
+const studentInput = document.getElementById('studentName');
+const autocompleteList = document.getElementById('autocomplete-list');
+
+let studentsCache = [];
+
+// fetch matching students
+async function searchStudents(query) {
+  const url = `${GAS_URL}?action=search&name=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data;
+}
+
+// render autocomplete list
+function renderAutocomplete(students) {
+  autocompleteList.innerHTML = "";
+  students.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "autocomplete-item";
+    item.textContent = `${s.name} • ${s.class}-${s.division}`;
+    item.onclick = () => {
+      studentInput.value = s.name;
+      autocompleteList.innerHTML = "";
+    };
+    autocompleteList.appendChild(item);
+  });
+}
+
+// event input
+studentInput.addEventListener('input', async () => {
+  const query = studentInput.value.trim();
+  if (!query) return autocompleteList.innerHTML = "";
+  const students = await searchStudents(query);
+  renderAutocomplete(students);
+});
+
+// mark student late
+document.getElementById('btnSubmit').addEventListener('click', async () => {
+  const name = studentInput.value.trim();
+  if (!name) return alert("Enter a student name!");
+  
+  const url = `${GAS_URL}?action=mark&name=${encodeURIComponent(name)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  
+  if (data.color === "green") {
+    messageEl.textContent = `✅ ${data.name} • ${data.class}-${data.division} marked late at ${data.time}`;
+    messageEl.className = "fw-semibold success";
+    studentInput.value = "";
+  } else {
+    messageEl.textContent = `❌ ${data.status}`;
+    messageEl.className = "fw-semibold error";
+  }
+});
+</script>
 </body>
 </html>
