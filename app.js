@@ -1,115 +1,137 @@
-// 🔗 Replace this with your actual Apps Script WebApp URL
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwLAL4YDjL21WmDGoQtLjesexDphjyNwNBXQ0bSUCLaUVjMZ_qdR9vhHfia7e3ZyEYtiQ/exec";
-
+// -------------------- CONFIG --------------------
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxeACCBVOprVJ1XNK3TdCtL_7l_J6SxxmIfBbM8JrNik17Y8mPpkDYk6Htys8EXWAOeAQ/exec";
 const studentIdInput = document.getElementById("studentId");
 const btnSubmitManual = document.getElementById("btnSubmitManual");
+const btnSync = document.getElementById("btnSync");
+const messageBox = document.getElementById("message");
+const queueList = document.getElementById("queueList");
 const btnStartQR = document.getElementById("btnStartQR");
 const btnStopQR = document.getElementById("btnStopQR");
-const btnSync = document.getElementById("btnSync");
-const messageEl = document.getElementById("message");
-const queueList = document.getElementById("queueList");
+const qrReaderId = "reader";
 
-let html5QrCode;
-let offlineQueue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+let offlineQueue = [];
+let html5QrcodeScanner;
 
-// Show status message
-function showMessage(text, type = "success") {
-  messageEl.textContent = text;
-  messageEl.className = type;
+// -------------------- LOCAL STORAGE --------------------
+function loadQueue() {
+  const data = localStorage.getItem("latecomerQueue");
+  offlineQueue = data ? JSON.parse(data) : [];
+  renderQueue();
 }
 
-// Render queue
+function saveQueue() {
+  localStorage.setItem("latecomerQueue", JSON.stringify(offlineQueue));
+}
+
 function renderQueue() {
   queueList.innerHTML = "";
-  offlineQueue.forEach((entry, i) => {
+  offlineQueue.forEach(item => {
     const li = document.createElement("li");
-    li.className = "list-group-item small";
-    li.textContent = `${entry.name || entry.id} at ${entry.time}`;
+    li.className = "list-group-item";
+    li.textContent = `${item.name || item.id} at ${item.time || "Pending"}`;
     queueList.appendChild(li);
   });
 }
-renderQueue();
 
-// Save queue
-function saveQueue() {
-  localStorage.setItem("offlineQueue", JSON.stringify(offlineQueue));
-}
-
-// Mark Latecomer (online/offline)
-async function markLatecomer(studentId) {
-  const now = new Date();
-  const timestamp = now.toLocaleString();
-
-  try {
-    const res = await fetch(`${WEBAPP_URL}?id=${encodeURIComponent(studentId)}`);
-    if (!res.ok) throw new Error("Network error");
-    const data = await res.json();
-
-    if (data.status && data.color === "green") {
-      showMessage(`✅ ${data.name} • ${data.class}-${data.division} at ${data.time}`, "success");
-    } else {
-      showMessage(data.status || "❌ Error", "error");
-    }
-  } catch (err) {
-    // Save offline
-    offlineQueue.push({
-      id: studentId,
-      time: timestamp
+// -------------------- SUBMIT FUNCTION --------------------
+function submitLatecomer(id) {
+  if (!id) return;
+  const timestamp = new Date();
+  const timeStr = timestamp.toLocaleTimeString("en-IN", { hour12: true });
+  
+  fetch(`${WEBAPP_URL}?id=${id}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status && data.status.includes("✅")) {
+        messageBox.textContent = `${data.name} • ${data.class}-${data.division} at ${data.time}`;
+        messageBox.style.color = "green";
+        offlineQueue.push({ id: data.id, name: data.name, class: data.class, division: data.division, time: data.time });
+        saveQueue();
+        renderQueue();
+      } else {
+        messageBox.textContent = data.status || "❌ Error";
+        messageBox.style.color = "red";
+      }
+    })
+    .catch(err => {
+      // Offline mode: save locally
+      messageBox.textContent = "📴 Saved offline";
+      messageBox.style.color = "blue";
+      offlineQueue.push({ id: id, name: null, time: timestamp.toLocaleString("en-IN") });
+      saveQueue();
+      renderQueue();
     });
-    saveQueue();
-    renderQueue();
-    showMessage(`📴 Saved offline: ${studentId} at ${timestamp}`, "error");
-  }
 }
 
-// Manual Entry Submit
+// -------------------- MANUAL ENTRY --------------------
 btnSubmitManual.addEventListener("click", () => {
   const id = studentIdInput.value.trim();
-  if (!id) return showMessage("❌ Enter Student ID", "error");
-  markLatecomer(id);
   studentIdInput.value = "";
+  submitLatecomer(id);
 });
 
-// Sync Pending Entries
-btnSync.addEventListener("click", async () => {
-  if (!offlineQueue.length) return showMessage("No pending entries", "error");
+// -------------------- OFFLINE SYNC --------------------
+btnSync.addEventListener("click", () => {
+  if (!navigator.onLine) {
+    messageBox.textContent = "❌ You are offline. Connect to internet to sync.";
+    messageBox.style.color = "red";
+    return;
+  }
 
-  const pending = [...offlineQueue];
+  const queueCopy = [...offlineQueue];
   offlineQueue = [];
   saveQueue();
   renderQueue();
 
-  for (let entry of pending) {
-    await markLatecomer(entry.id);
-  }
+  queueCopy.forEach(item => {
+    if (item.id) submitLatecomer(item.id);
+  });
+
+  messageBox.textContent = "⬆️ Syncing pending entries...";
+  messageBox.style.color = "green";
 });
 
-// QR Scanner
+// -------------------- QR SCANNER --------------------
 btnStartQR.addEventListener("click", () => {
-  if (!html5QrCode) {
-    html5QrCode = new Html5Qrcode("reader");
-  }
-  html5QrCode.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    (decodedText) => {
-      html5QrCode.stop();
+  html5QrcodeScanner = new Html5Qrcode(qrReaderId);
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      html5QrcodeScanner.start(
+        cameras[0].id,
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          const id = qrCodeMessage.trim();
+          studentIdInput.value = id;
+          submitLatecomer(id);
+          stopQRScanner();
+        },
+        err => console.warn("QR scan error:", err)
+      );
+      btnStartQR.disabled = true;
+      btnStopQR.disabled = false;
+    } else {
+      messageBox.textContent = "❌ No camera found";
+      messageBox.style.color = "red";
+    }
+  }).catch(err => {
+    messageBox.textContent = "❌ Camera error: " + err;
+    messageBox.style.color = "red";
+  });
+});
+
+btnStopQR.addEventListener("click", stopQRScanner);
+
+function stopQRScanner() {
+  if (html5QrcodeScanner) {
+    html5QrcodeScanner.stop().then(() => {
+      html5QrcodeScanner.clear();
       btnStartQR.disabled = false;
       btnStopQR.disabled = true;
-      markLatecomer(decodedText);
-    },
-    (errorMessage) => {
-      console.log("QR Scan error:", errorMessage);
-    }
-  );
-  btnStartQR.disabled = true;
-  btnStopQR.disabled = false;
-});
-
-btnStopQR.addEventListener("click", () => {
-  if (html5QrCode) {
-    html5QrCode.stop();
-    btnStartQR.disabled = false;
-    btnStopQR.disabled = true;
+    }).catch(err => console.error(err));
   }
+}
+
+// -------------------- INIT --------------------
+window.addEventListener("load", () => {
+  loadQueue();
 });
