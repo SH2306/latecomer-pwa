@@ -1,41 +1,43 @@
-const CACHE = "latecomer-pwa-v3";
+const CACHE_NAME = "latecomer-pwa-v2";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
   "./manifest.json",
-  "./icons/icon-192.png",
+  "./icon.png",
   "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css",
   "https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"
 ];
-const GAS_HOST = "script.google.com";
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+self.addEventListener("install", event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+  );
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
+self.addEventListener("activate", event => {
+  event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
+self.addEventListener("fetch", event => {
+  const url = new URL(event.request.url);
+  // Always use network for your GAS webapp calls
+  if (url.host.includes("script.google.com")) return;
 
-  if (url.host.includes(GAS_HOST)) return; // don't cache GAS requests
-
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      return cached || fetch(e.request).then((resp) => {
-        if (e.request.method === "GET" && resp && resp.status === 200) {
-          caches.open(CACHE).then((c) => c.put(e.request, resp.clone()));
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      return cached || fetch(event.request).then(response => {
+        if (event.request.method === "GET" && response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
         }
-        return resp;
+        return response;
       }).catch(() => cached);
     })
   );
