@@ -1,4 +1,4 @@
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwJ-ATrkbEbhUyowe7UdPOCdmWctnPZMdKADFE-xjED_UJoLfXo3sSo2RNVjJCIDuvL2Q/exec"; // Replace with your Apps Script URL
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyNgz99oqlTMF0YuRzatuYBPL5DbjscxsyC5BsnDYPT0ZksHpfoOydpaYJSfFWT54oMqQ/exec"; // Replace with your Apps Script URL
 const messageEl = document.getElementById('message');
 const studentInput = document.getElementById('studentName');
 const autocompleteList = document.getElementById('autocomplete-list');
@@ -102,3 +102,4 @@ document.getElementById('btnSync')?.addEventListener('click', async () => {
 
 // Initialize queue render
 renderQueue();
+
