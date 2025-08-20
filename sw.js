@@ -1,44 +1,21 @@
-const CACHE_NAME = "latecomer-pwa-v2";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./app.js",
-  "./manifest.json",
-  "./icon.png",
-  "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css",
-  "https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"
-];
+const CACHE = "latecomer-pwa-v1";
+const ASSETS = ["./","./index.html","./app.js","./manifest.json","https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css"];
 
-self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
-  );
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
-self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+self.addEventListener("activate", e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
   );
   self.clients.claim();
 });
 
-self.addEventListener("fetch", event => {
-  const url = new URL(event.request.url);
-  // Always use network for your GAS webapp calls
-  if (url.host.includes("script.google.com")) return;
-
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).then(response => {
-        if (event.request.method === "GET" && response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
+self.addEventListener("fetch", e => {
+  if (e.request.url.includes("script.google.com")) return; // GAS network-only
+  e.respondWith(
+    caches.match(e.request).then(cached=>cached || fetch(e.request).then(resp=>{caches.open(CACHE).then(c=>c.put(e.request,resp.clone())); return resp;})).catch(()=>cached)
   );
 });
